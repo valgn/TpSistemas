@@ -1,0 +1,1 @@
+-record(nodo, {ip, cpu, mem, gpu}).
