@@ -1,1 +1,1 @@
--record(nodo, {ip, cpu, mem, gpu}).
+-record(node, {ip, port, cpu, mem, gpu}).
