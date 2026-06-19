@@ -1,1 +1,4 @@
+-define(NUMBERJOBS, 100).
+-define(PLUSTIME, 1000).
+-define(MINTIME, 100).
 -record(node, {ip, port, cpu, mem, gpu}).
