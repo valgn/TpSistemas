@@ -28,8 +28,10 @@ int fd_readline(int fd, char *buf)
 /*
 parse_erlang_petition: parses the input of the erlang client and returns a pointer to a info structure
 */
-void *parse_erlang_petition(int clientfd)
+Informacion *parse_erlang_petition(int clientfd)
 {
+    Informacion *info = malloc(sizeof(Informacion));
+
     char buff[MAX_BUFF];
     int read_characters = fd_readline(clientfd, buff);
     if (read_characters < 0) return 0;
@@ -43,47 +45,67 @@ void *parse_erlang_petition(int clientfd)
 
     if(strcmp(token, "JOB_REQUEST"))
     {
+        info->command = JOB_REQUEST;
         token = strtok_r(NULL, " ", &saveptr1); // job_id
         if(token == NULL)
         {
-            // error (indicar estructura invalido)
+            info->command = INVALID;
+            return info;
         }
         int job_id = atoi(token); // da 0 si no es un entero o si el entero es 0
         if(!job_id)
         {
-            // error (indicar estructura invalido)
+            info->command = INVALID;
+            return info;
         }
+
+        GList request_list = glist_create();
         
         token = strtok(NULL, " "); // ip/res/amount
         while(token != NULL)
         {
+            Request *request_structure = malloc(sizeof(Request));
+            request_structure->job_id = job_id;
+
             char *request = strtok_r(token, ":", &saveptr2); // ip
             if(request == NULL)
             {
                 // error (indicar estructura invalido) y eliminar lista
+                info->command = INVALID;
+                free(request_structure);
+                glist_destroy(request_list, //destroy function);
+                return info;
             }
-
+            request_structure->ip = strdup(request);
 
             request = strtok_r(NULL, ":", &saveptr2); // resource
             if(request == NULL)
             {
                 // error (indicar estructura invalido) y eliminar lista
+                info->command = INVALID;
+                free(request_structure);
+                glist_destroy(request_list, //destroy function);
+                return info;
             }
             if(strcmp(request, "cpu"))
             {
-
+                request_structure->resource = CPU;
             }
             else if(strcmp(request, "mem"))
             {
-
+                request_structure->resource = MEM;
             }
             else if(strcmp(request, "gpu"))
             {
-
+                request_structure->resource = GPU;
             }
             else
             {
                 // error (indicar estructura invalido) y eliminar lista
+                info->command = INVALID;
+                free(request_structure);
+                glist_destroy(request_list, //destroy function);
+                return info;
             }
             
 
@@ -91,63 +113,100 @@ void *parse_erlang_petition(int clientfd)
             if(request == NULL)
             {
                 // error (indicar estructura invalido) y eliminar lista
+                info->command = INVALID;
+                free(request_structure);
+                glist_destroy(request_list, //destroy function);
+                return info;
             }
             int amount = atoi(request);
             if(!amount)
             {
                 // error (indicar estructura invalido) y eliminar lista
+                info->command = INVALID;
+                free(request_structure);
+                glist_destroy(request_list, //destroy function);
+                return info;
             }
+            request_structure->amount = amount;
 
-            // crear estructura request y almacenarla en la lista
+            request_list = glist_addFront(request_list, request_structure, //cpy function); 
 
             token = strtok_r(NULL, " ", &saveptr1);
         }
-        
-        
+
+        info->structure = request_list;
     }
 
     else if(strcmp(token, "JOB_RELEASE"))
     {
+        info->command = JOB_RELEASE;
         token = strtok_r(NULL, " ", &saveptr1); // job_id
         if(token == NULL)
         {
             // error (indicar estructura invalido)
+            info->command = INVALID;
+            return info;
         }
+
         int job_id = atoi(token); // da 0 si no es un entero o si el entero es 0
         if(!job_id)
         {
             // error (indicar estructura invalido)
+            info->command = INVALID;
+            return info;
         }
+
         token = strtok(NULL, " ");
         if(token != NULL)
         {
             // error (indicar estructura invalido)
+            info->command = INVALID;
+            return info;
         }
-        // crear estructura release
+
+        int *job_id_info_ptr = malloc(sizeof(int));
+        *job_id_info_ptr = job_id;
+
+        info->structure = job_id_info_ptr;
     } 
 
     else if(strcmp(token, "JOB_STATUS"))
     {
+        info->command = JOB_STATUS;
         token = strtok_r(NULL, " ", &saveptr1); // job_id
         if(token == NULL)
         {
             // error (indicar estructura invalido)
+            info->command = INVALID;
+            return info;
         }
+
         int job_id = atoi(token); // da 0 si no es un entero o si el entero es 0
         if(!job_id)
         {
             // error (indicar estructura invalido)
+            info->command = INVALID;
+            return info;
         }
+
         token = strtok(NULL, " ");
         if(token != NULL)
         {
             // error (indicar estructura invalido)
+            info->command = INVALID;
+            return info;
         }
-        // crear estructura status
+
+        int *job_id_info_ptr = malloc(sizeof(int));
+        *job_id_info_ptr = job_id;
+
+        info->structure = job_id_info_ptr;
     }
 
     else
     {
-        // error (indicar estructura invalido)
+        info->command = INVALID;
     }
+
+    return info;
 }

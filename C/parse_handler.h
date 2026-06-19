@@ -4,7 +4,6 @@
 #define MAX_BUFF 255
 
 #include "data_types.h"
-
-
+#include "structures/glist.h"
 
 #endif
