@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "data_types.h"
+#include "auxiliaryfunctions.h"
 
 // dont make a copy only return the original pointer
 void* copy_request (void* source ){

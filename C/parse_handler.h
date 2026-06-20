@@ -3,7 +3,10 @@
 
 #define MAX_BUFF 255
 
-#include "data_types.h"
+#include "structures/data_types.h"
 #include "structures/glist.h"
+#include "structures/auxiliaryfunctions.h"
+
+PetitionInfo *parse_erlang_petition(int clientfd);
 
 #endif
