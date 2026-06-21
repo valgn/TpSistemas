@@ -220,6 +220,18 @@ PetitionInfo *parse_erlang_petition(int clientfd)
         info->structure = job_id_info_ptr;
     }
 
+    else if(!strcmp(token, "GET_NODES"))
+    {
+        info->command = GET_NODES;
+        token = strtok_r(NULL, " ", &saveptr1);
+        if(token != NULL)
+        {
+            // error (indicar estructura invalido)
+            info->command = INVALID;
+            return info;
+        }
+    }
+
     else
     {
         info->command = INVALID;

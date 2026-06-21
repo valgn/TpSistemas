@@ -12,6 +12,7 @@ typedef enum _Command
     RESERVE,
     RELEASE,
     INVALID,
+    GET_NODES,
     DISCONNECT
 } Command;
 

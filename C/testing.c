@@ -28,9 +28,9 @@
 #define ERLANG_TCP_PORT 5678
 #define NODE_TCP_PORT 5679
 
-#define MAX_CPU 4
-#define MAX_MEM 8192
-#define MAX_GPU 1
+#define MAX_CPU 3
+#define MAX_MEM 4096
+#define MAX_GPU 0
 
 int available_cpu = MAX_CPU;
 int available_mem = MAX_MEM;
@@ -64,8 +64,8 @@ struct sockaddr_in create_udp_broadcast_dest()
 
     dest.sin_family = AF_INET;
     dest.sin_port = htons(UDP_PORT);
-    // dest.sin_addr.s_addr = htonl(INADDR_BROADCAST);
-    inet_pton(AF_INET, "26.227.8.255", &dest.sin_addr); // prueba radmin vpn
+    dest.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+    //dest.sin_addr.s_addr = inet_addr("192.168.0.23");
 
     return dest;
 }
@@ -96,6 +96,33 @@ int handle_erlang_client(int client_conn_fd)
     {
         printf("INVALID REQUEST FROM FD %d\n", client_conn_fd);
         write(client_conn_fd, "INVALID_REQUEST\n", 16);
+        return 1;
+    }
+
+    if (info->command == GET_NODES)
+    {
+        char buffer[MAX_BUFF];
+        int offset = 0;
+
+        offset += snprintf(buffer + offset, MAX_BUFF - offset, "NODES ");
+
+        GNode *curr = active_nodes;
+
+        while (curr != NULL)
+        {
+            CNode *node = curr->data;
+
+            offset += snprintf(buffer + offset, MAX_BUFF - offset, "%s:%d:cpu:%d:mem:%d:gpu:%d", node->ip, node->port, node->cpu, node->mem, node->gpu);
+
+            if (curr->next != NULL) offset += snprintf(buffer + offset, MAX_BUFF - offset, ";");
+
+            curr = curr->next;
+        }
+
+        offset += snprintf(buffer + offset, MAX_BUFF - offset, "\n");
+
+        write(client_conn_fd, buffer, offset);
+
         return 1;
     }
     
@@ -168,7 +195,7 @@ void handle_udp_announce(int udpfd)
 
     printf("[UDP INSERT] new node %s:%d added\n", temp.ip, temp.port);
 
-    glist_addFront(active_nodes, newNode, identity_copy);
+    active_nodes = glist_addFront(active_nodes, newNode, identity_copy);
 }
 
 void remove_down_nodes(time_t now)
