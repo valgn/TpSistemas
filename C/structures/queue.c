@@ -15,13 +15,13 @@ Queue *create_queue()
 }
 
 /**
- * Adds an element with the given id to the end of the queue.
+ * Adds an element to the end of the queue.
  */
-void enqueue(Queue *queue, int id)
+void enqueue(Queue *queue, void* data, CopyFunction copy )
 {
     // Create the new node to be appended.
     Nodo *nodo = malloc(sizeof(Nodo));
-    nodo->id = id;
+    nodo->data = copy(data);
     nodo->next = NULL;
     if(queue->first == NULL)
     {
@@ -38,19 +38,20 @@ void enqueue(Queue *queue, int id)
 }
 
 /**
- * Removes and returns the id at the front of the queue.
+ * Removes and returns the data at the front of the queue.
  * Returns -1 if the queue is empty.
  */
-void* dequeue(Queue *queue)
+void* dequeue(Queue *queue, CopyFunction copy, DestroyFunction destroy )
 {
     if (queue->first != NULL)
     {
         // Save the next node before freeing the current first node.
         Nodo *new_first = queue->first->next;
-        int dequeued_id = queue->first->id;
+        int dequeued_data = copy(queue->first->data);
+        destroy(queue->first->data);
         free(queue->first);
         queue->first = new_first;
-        return dequeued_id;
+        return dequeued_data;
     }
 
     return -1;
@@ -58,7 +59,7 @@ void* dequeue(Queue *queue)
 
 /**
  * Destroys the queue, freeing every remaining node and applying the
- * destroy function to each dequeued id.
+ * destroy function to each dequeued data.
  */
 void destroy_queue(Queue *queue ,DestroyFunction destroy )
 {

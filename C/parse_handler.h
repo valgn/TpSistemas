@@ -6,7 +6,11 @@
 #include "structures/data_types.h"
 #include "structures/glist.h"
 #include "structures/auxiliaryfunctions.h"
+// #include "structures/hashtable.h"
+// #include "structures/queue.h"
 
 PetitionInfo *parse_erlang_petition(int clientfd);
+
+PetitionInfo *parse_node_petition(int clientfd);
 
 #endif

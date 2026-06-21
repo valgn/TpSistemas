@@ -100,7 +100,9 @@ PetitionInfo *parse_erlang_petition(int clientfd)
                 glist_destroy(request_list, destroy_request);
                 return info;
             }
-            request_structure->ip = strdup(request);
+            if (request[0] == '@') request++;
+            strncpy(request_structure->ip, request, INET_ADDRSTRLEN);
+            request_structure->ip[INET_ADDRSTRLEN - 1] = '\0';
 
             request = strtok_r(NULL, ":", &saveptr2); // resource
             if(request == NULL)

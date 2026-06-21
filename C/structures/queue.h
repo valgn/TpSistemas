@@ -4,13 +4,14 @@
 
 
 typedef void (*DestroyFunction)(void *data);
+typedef void *(*CopyFunction)(void *data);
 
 /**
- * Single node of the queue, holding an id and a pointer to the next node.
+ * Single node of the queue, holding a data and a pointer to the next node.
  */
 typedef struct nodo
 {
-    void* id;
+    void* data;
     struct nodo *next;
 } Nodo;
 
@@ -30,18 +31,18 @@ typedef struct queue
 Queue *create_queue();
 
 /**
- * Adds an element with the given id to the end of the queue.
+ * Adds an element to the end of the queue.
  */
-void enqueue(Queue *queue, int id);
+void enqueue(Queue *queue, void* data, CopyFunction copy )
 
 /**
- * Removes and returns the id at the front of the queue.
+ * Removes and returns the data at the front of the queue.
  */
-void* dequeue(Queue *queue);
+void* dequeue(Queue *queue, CopyFunction copy, DestroyFunction destroy )
 
 /**
  * Destroys the queue, freeing every remaining node and applying the
- * destroy function to each dequeued id.
+ * destroy function to each dequeued data.
  */
 void destroy_queue(Queue *queue, DestroyFunction destr);
 
