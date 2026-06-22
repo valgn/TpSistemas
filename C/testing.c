@@ -32,13 +32,179 @@
 #define MAX_MEM 4096
 #define MAX_GPU 0
 
+char my_ip[INET_ADDRSTRLEN] = "192.168.0.X";
+
 int available_cpu = MAX_CPU;
 int available_mem = MAX_MEM;
 int available_gpu = MAX_GPU;
 
-// Queue* queue_jobs = queue_create();
-// Hash_table = hashTable_create(50, copy_request, comp_request, destroy_request, hash_request);
+pthread_cond_t available_job_in_queue = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t resource_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+Queue* queue_jobs = queue_create();
+HashTabla remote_allocations_by_fd = hashTable_create(50, copy_request, comp_request, destroy_request, hash_request);
+HashTabla hashtable_jobs = hashTable_create(50, copy_request, comp_request, destroy_request, hash_request);
 GList active_nodes = NULL;
+
+void release_remote_allocation(int fd, int job_id)
+{
+    GList list = hashTable_search(remote_allocations_by_fd, &fd);
+    if (!list) return;
+
+    GNode *curr = list;
+
+    while (curr)
+    {
+        RemoteAllocation *a = curr->data;
+
+        if (a->job_id == job_id)
+        {
+            pthread_mutex_lock(&resource_mutex);
+
+            switch (a->resource)
+            {
+                case CPU: available_cpu += a->amount; break;
+                case MEM: available_mem += a->amount; break;
+                case GPU: available_gpu += a->amount; break;
+            }
+
+            pthread_mutex_unlock(&resource_mutex);
+
+            printf("[RELEASE] fd=%d job=%d\n", fd, job_id);
+
+            // borrar nodo de lista (simplificado)
+        }
+
+        curr = curr->next;
+    }
+}
+
+void release_all_remote_requests_from_fd(int fd)
+{
+    GList list = hashTable_search(remote_allocations_by_fd, &fd);
+
+    if (!list) return;
+
+    GNode *curr = list;
+
+    while (curr)
+    {
+        RemoteAllocation *a = curr->data;
+
+        pthread_mutex_lock(&resource_mutex);
+
+        switch (a->resource)
+        {
+            case CPU: available_cpu += a->amount; break;
+            case MEM: available_mem += a->amount; break;
+            case GPU: available_gpu += a->amount; break;
+        }
+
+        pthread_mutex_unlock(&resource_mutex);
+
+        free(a);
+        curr = curr->next;
+    }
+
+    glist_destroy(list, identity_copy);
+    hashTable_delete(remote_allocations_by_fd, &fd);
+
+    printf("[CLEANUP] Freed all remote allocations for fd %d\n", fd);
+}
+
+void register_remote_allocation(int fd, NodeRequest *r)
+{
+    RemoteAllocation *alloc = malloc(sizeof(RemoteAllocation));
+
+    alloc->fd = fd;
+    alloc->job_id = r->job_id;
+    alloc->resource = r->resource;
+    alloc->amount = r->amount;
+
+    GList list = hashTable_search(remote_allocations_by_fd, &fd);
+
+    list = glist_addFront(list, alloc, identity_copy);
+
+    hashTable_insert(remote_allocations_by_fd, &fd, list);
+}
+
+int available_resource(Resource r)
+{
+    switch (r)
+    {
+        case CPU: return available_cpu;
+        case MEM: return available_mem;
+        case GPU: return available_gpu;
+    }
+    return 0;
+}
+
+int max_resource(Resource r)
+{
+    switch (r)
+    {
+        case CPU: return MAX_CPU;
+        case MEM: return MAX_MEM;
+        case GPU: return MAX_GPU;
+    }
+    return 0;
+}
+
+
+int is_local_node(char *ip)
+{
+    return strcmp(ip, my_ip) == 0;
+}
+
+
+void scheduler_loop()
+{
+    while (1)
+    {
+        while(empty_queue(queue_jobs)) pthread_cond_wait(&available_job_in_queue, &resource_mutex);
+
+        Job *job_a_intentar_cumplir = queue_jobs->first->data;
+
+        ErlangRequest *request_a_intentar_cumplir = job_a_intentar_cumplir->requests->data;
+
+        while(request_a_intentar_cumplir != NULL)
+        {
+            if(is_local_node(request_a_intentar_cumplir->ip))
+            {
+                if(request_a_intentar_cumplir->amount > max_resource(request_a_intentar_cumplir->resource))
+                {
+                    // el job no se puede cumplir nunca, lo saco de la cola y aviso al cliente
+                    dequeue(queue_jobs, identity_copy, destroy_request);
+                    write(job_a_intentar_cumplir->clientfd, "JOB_DENIED\n", 11);
+                    break;
+                }
+
+                else if (available_resource(request_a_intentar_cumplir->resource) < request_a_intentar_cumplir->amount)
+                {
+                    // no se puede cumplir el job 
+                    break;
+                }
+                else 
+                {
+                    
+                }
+            }
+            else 
+            {
+                
+            }
+    
+            request_a_intentar_cumplir = request_a_intentar_cumplir->next;
+        }
+
+        if (!request_a_intentar_cumplir) 
+        {
+            // mandas las req
+        }
+
+
+    }
+}
 
 int setup_udp_node_sock()
 {
@@ -82,24 +248,26 @@ int handle_erlang_client(int client_conn_fd)
 {
     PetitionInfo *info = parse_erlang_petition(client_conn_fd);
 
-    //"info->structure" contiene la lista de requests en caso de request o un puntero a entero (jobid) en caso de status/release
+    //"info->structure" contiene el job en caso de request, un puntero a entero (jobid) en caso de status/release o nada en caso de DISCONNECT/INVALID/GET_NODES
 
     if(info->command == DISCONNECT)
     {
         printf("CLIENT WITH FD %d DISCONNECTED\n", client_conn_fd);
-        // liberar recursos asociados a ese cliente
-        
+        // liberar recursos asociados a ese cliente (asociados a su fd), y sacar lo que este en la cola de jobs
+        //  CLAVE: liberar TODO lo que ese nodo tenía reservado
+        // release_all_requests_from_fd(client_conn_fd);
+
         return 0;
     }
 
-    if(info->command == INVALID)
+    else if(info->command == INVALID)
     {
         printf("INVALID REQUEST FROM FD %d\n", client_conn_fd);
         write(client_conn_fd, "INVALID_REQUEST\n", 16);
         return 1;
     }
 
-    if (info->command == GET_NODES)
+    else if (info->command == GET_NODES)
     {
         char buffer[MAX_BUFF];
         int offset = 0;
@@ -125,22 +293,142 @@ int handle_erlang_client(int client_conn_fd)
 
         return 1;
     }
-    
-    if(info->command == JOB_REQUEST)
+
+    else if(info->command == JOB_RELEASE)
+{
+    int *job_id_recibido = (int*)info->structure;
+
+    Job dummy;
+    dummy.job_id = *job_id_recibido;
+
+    // 1. Buscamos el Job primero para poder examinar sus recursos antes de borrarlo
+    Job *job_a_liberar = hashTable_search(hashtable_jobs, &dummy);
+
+    if (job_a_liberar != NULL) 
     {
-        printf("VALID REQUEST FROM FD %d\n", client_conn_fd);
-        // for(gnode* node = info->structure ; node != NULL; node = node->next ){
-        //     enqueue(queue_jobs,node->data,p_copy_request);
-        // }
-        write(client_conn_fd, "VALID_REQUEST\n", 14);
+        // 2. Recorremos la lista de requests del job para devolver recursos o avisar a remotos
+        GNode *curr = job_a_liberar->requests; // requests es un GList (GNode*)
+        
+        while (curr != NULL) 
+        {
+            ErlangRequest *req = (ErlangRequest*)curr->data;
+
+            if (is_local_node(req->ip)) 
+            {
+                // Es LOCAL: Modificamos las variables globales protegiéndolas con el mutex
+                pthread_mutex_lock(&resource_mutex);
+                
+                switch (req->resource) 
+                {
+                    case CPU: available_cpu += req->amount; break;
+                    case MEM: available_mem += req->amount; break;
+                    case GPU: available_gpu += req->amount; break;
+                }
+                
+                // Importante: Avisamos al scheduler_loop de que hay nuevos recursos libres
+                pthread_cond_signal(&available_job_in_queue);
+                pthread_mutex_unlock(&resource_mutex);
+            } 
+            else 
+            {
+                // Es REMOTO: Acá debes armar el buffer y enviar el mensaje TCP al nodo correspondiente
+                // Ejemplo conceptual:
+                // enviar_mensaje_release_remoto(req->ip, req->job_id, req->resource, req->amount);
+                printf("[REMOTE RELEASE] Enviar mensaje de liberación a la IP: %s\n", req->ip);
+            }
+
+            curr = curr->next;
+        }
+
+        // 3. Una vez devueltos todos los recursos, lo borramos físicamente de la tabla hash
+        // Esto llamará internamente a la función de destrucción de tu Job
+        hashTable_delete(hashtable_jobs, &dummy);
+        printf("Job %d liberado y eliminado con éxito.\n", dummy.job_id);
+    } 
+    else 
+    {
+        printf("Advertencia: Se intentó liberar el Job %d pero no se encontró en activos.\n", dummy.job_id);
+    }
+    
+    return 1;
+}
+
+    else if(info->command == JOB_STATUS)
+    {
+        // devuelve estado
+    }
+
+    else if(info->command == JOB_REQUEST)
+    {
+        // SE ENCOLA EL JOB
+        enqueue(queue_jobs,info->structure,identity_copy);
+        pthread_cond_signal(&available_job_in_queue);
         return 1;
     }
 }
 
-// int handle_node_client(int client_conn_fd)
-// {
+int handle_node_client(int client_conn_fd)
+{
+    PetitionInfo *info = parse_node_petition(client_conn_fd);
 
-// }
+    if (info->command == DISCONNECT)
+    {
+        printf("NODE DISCONNECTED FD %d\n", client_conn_fd);
+
+        release_all_remote_requests_from_fd(client_conn_fd);
+
+        return 0;
+    }
+
+    if (info->command == RESERVE)
+    {
+        NodeRequest *r = (NodeRequest*)info->structure;
+
+        if (r->amount > max_resource(r->resource))
+        {
+            write(client_conn_fd, "DENIED\n", 7);
+            return 1;
+        }
+
+        pthread_mutex_lock(&resource_mutex);
+
+        if (available_resource(r->resource) < r->amount)
+        {
+            pthread_mutex_unlock(&resource_mutex);
+
+            // A ESPERAR, TODAVIA NO HAY ESPACIO
+
+            // write(client_conn_fd, "WAITING\n", 8);
+            return 1;
+        }
+
+        switch (r->resource)
+        {
+            case CPU: available_cpu -= r->amount; break;
+            case MEM: available_mem -= r->amount; break;
+            case GPU: available_gpu -= r->amount; break;
+        }
+
+        pthread_mutex_unlock(&resource_mutex);
+
+        register_remote_allocation(client_conn_fd, r);
+
+        write(client_conn_fd, "GRANTED\n", 8);
+        return 1;
+    }
+
+    if (info->command == RELEASE)
+    {
+        int job_id = *((int*)info->structure);
+
+        release_remote_allocation(client_conn_fd, job_id);
+
+        // write(client_conn_fd, "RELEASED\n", 9);
+        return 1;
+    }
+
+    return 1;
+}
 
 void handle_udp_announce(int udpfd)
 {

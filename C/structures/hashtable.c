@@ -44,6 +44,10 @@ HashTable hashTable_create(unsigned capacity, CopyFunction copy,
   table->destr = destr;
   table->hash = hash;
 
+  for (unsigned idx = 0; idx < capacidad; ++idx) {
+    tabla->elems[idx].list = glist_create();
+  }
+
   return table;
 }
 

@@ -37,6 +37,8 @@ void enqueue(Queue *queue, void* data, CopyFunction copy )
     }
 }
 
+
+
 /**
  * Removes and returns the data at the front of the queue.
  * Returns -1 if the queue is empty.
@@ -51,11 +53,22 @@ void* dequeue(Queue *queue, CopyFunction copy, DestroyFunction destroy )
         destroy(queue->first->data);
         free(queue->first);
         queue->first = new_first;
+        if (queue->first == NULL) { 
+            queue->last = NULL;
+        }
+
         return dequeued_data;
     }
 
-    return -1;
+    return NULL;
 }
+
+int empty_queue(Queue *queue);
+{
+    (if queue->first == NULL) return 1;
+    else return 0;
+}
+
 
 /**
  * Destroys the queue, freeing every remaining node and applying the
@@ -64,6 +77,7 @@ void* dequeue(Queue *queue, CopyFunction copy, DestroyFunction destroy )
 void destroy_queue(Queue *queue ,DestroyFunction destroy )
 {
     while(queue->first != NULL)
-      destroy(dequeue(queue));
+    void* data = dequeue(queue, copy, destroy);
+      destroy(data);
     free(queue);
 }

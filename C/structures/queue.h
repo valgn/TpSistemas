@@ -35,6 +35,10 @@ Queue *create_queue();
  */
 void enqueue(Queue *queue, void* data, CopyFunction copy )
 
+// return 1 if a queue is empty otherwise 0 
+
+int empty_queue(Queue *queue);
+
 /**
  * Removes and returns the data at the front of the queue.
  */

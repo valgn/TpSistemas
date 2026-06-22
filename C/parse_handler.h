@@ -4,7 +4,6 @@
 #define MAX_BUFF 255
 
 #include "structures/data_types.h"
-#include "structures/glist.h"
 #include "structures/auxiliaryfunctions.h"
 // #include "structures/hashtable.h"
 // #include "structures/queue.h"

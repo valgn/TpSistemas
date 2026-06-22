@@ -6,7 +6,7 @@
 
 // It doesn't make a phsycal copy, only return the original pointer.
 void* copy_request (void* source ){
-    Request * request = source ;
+    ErlangRequest * request = source ;
     return request; 
 }
 
@@ -21,36 +21,28 @@ void* copy_request (void* source ){
 // }
 
 void destroy_request(void* source){
-    Request * request = source;
-    free(request->ip);
+    ErlangRequest * request = source;
     free(request);
 }
 
 
-// Request *request
-// unsigned hash_request(void* source){
-//         Request * request = (Request * )source ;
-//     return request->job_id;
+unsigned hash_jobs(void* source){
     
-//     else{
-//         perror("no es un request");
-//     } 
-// }
+    Job * job = (job * )source ;
+    return job->job_id;  
+     
+ }
 
-// unsigned comp_request(void* source1 , void* source2){
-//     Request * request1 = (Petition *) source1;
-//      Request * request2 = (Petition *) source2;
-//         if (request1->job_id == request2->job_id)
-//         return 0;
-//         else if(request1->job_id > request2->job_id )
-//         return 1;
-//         else 
-//         return -1;
-//     }
-    
-//     else{
-//         perror("no es un request");
-//     }
+int comp_request(void* source1 , void* source2){
+    Job * job1 = (Job *) source1;
+      Job * job2 = (Job *) source2;
+         if (job1->job_id == job2->job_id)
+         return 0;
+         else if(job1->job_id > job2->job_id)
+         return 1;
+         else 
+         return -1;
+     }  
 
 
 void *identity_copy(void *data)

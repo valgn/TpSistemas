@@ -86,10 +86,11 @@ PetitionInfo *parse_erlang_petition(int clientfd)
             return info;
         }
 
+        int i = 0;
+
         while(token != NULL)
         {
-            Request *request_structure = malloc(sizeof(Request));
-            request_structure->job_id = job_id;
+            ErlangRequest *request_structure = malloc(sizeof(ErlangRequest));
 
             char *request = strtok_r(token, ":", &saveptr2); // ip
             if(request == NULL)
@@ -100,6 +101,7 @@ PetitionInfo *parse_erlang_petition(int clientfd)
                 glist_destroy(request_list, destroy_request);
                 return info;
             }
+
             if (request[0] == '@') request++;
             strncpy(request_structure->ip, request, INET_ADDRSTRLEN);
             request_structure->ip[INET_ADDRSTRLEN - 1] = '\0';
@@ -145,13 +147,21 @@ PetitionInfo *parse_erlang_petition(int clientfd)
                 return info;
             }
             request_structure->amount = amount;
+            request_structure->state = REQ_PENDING;
 
             request_list = glist_addFront(request_list, request_structure, copy_request); 
 
             token = strtok_r(NULL, " ", &saveptr1);
+            i++;
         }
 
-        info->structure = request_list;
+        Job *job_info = malloc(sizeof(Job));
+        job_info->job_id = job_id;
+        job_info->requests = request_list;
+        job_info->clientfd = clientfd;
+        job_info->pending = i;
+
+        info->structure = job_info;
     }
 
     else if(!strcmp(token, "JOB_RELEASE"))
@@ -248,126 +258,56 @@ PetitionInfo *parse_node_petition(int clientfd)
     PetitionInfo *info = malloc(sizeof(PetitionInfo));
 
     char buff[MAX_BUFF];
-    int read_characters = fd_readline(clientfd, buff);
-    
-    if (read_characters <= 0)
+    int n = fd_readline(clientfd, buff);
+
+    if (n <= 0)
     {
-        // cliente cerró conexión o hubo desconexion abrupta
         info->command = DISCONNECT;
         return info;
     }
 
-    buff[strcspn(buff, "\n")] = '\0'; // quitamos el \n
+    buff[strcspn(buff, "\n")] = '\0';
 
-    char *saveptr1;
-    char *saveptr2;
+    char *saveptr;
+    char *token = strtok_r(buff, " ", &saveptr);
 
-    char *token = strtok_r(buff, " ", &saveptr1);
-
-    if(token == NULL)
-    {
-        info->command = INVALID;
-        return info;
-    }
-
-    if(!strcmp(token, "RESERVE"))
+    if (!strcmp(token, "RESERVE"))
     {
         info->command = RESERVE;
-        token = strtok_r(NULL, " ", &saveptr1); // job_id
-        if(token == NULL)
-        {
-            info->command = INVALID;
-            return info;
-        }
-        int job_id = atoi(token); // da 0 si no es un entero o si el entero es 0
 
-        if(!job_id)
-        {
-            info->command = INVALID;
-            return info;
-        }
+        NodeRequest *req = malloc(sizeof(NodeRequest));
+        req->client_fd = clientfd;
 
-        Request *request_structure = malloc(sizeof(Request));
-        request_structure->job_id = job_id;
-        
-        token = strtok_r(NULL, " ", &saveptr1); // resource
+        // job_id
+        token = strtok_r(NULL, " ", &saveptr);
+        req->job_id = atoi(token);
 
-        if(token == NULL)
-        {
-            // error (indicar estructura invalido)
-            info->command = INVALID;
-            free(request_structure);
-            return info;
-        }
-        if(!strcmp(token, "cpu")) request_structure->resource = CPU;
-        else if(!strcmp(token, "mem")) request_structure->resource = MEM;
-        else if(!strcmp(token, "gpu")) request_structure->resource = GPU;
+        // resource
+        token = strtok_r(NULL, " ", &saveptr);
+        if (!strcmp(token, "cpu")) req->resource = CPU;
+        else if (!strcmp(token, "mem")) req->resource = MEM;
+        else if (!strcmp(token, "gpu")) req->resource = GPU;
 
-        token = strtok_r(NULL, " ", &saveptr1); // amount
-        if(token == NULL)
-        {
-            // error (indicar estructura invalido)
-            info->command = INVALID;
-            free(request_structure);
-            return info;
-        }
-        int amount = atoi(token);
-        if(!amount)
-        {
-            // error (indicar estructura invalido)
-            info->command = INVALID;
-            free(request_structure);
-            return info;
-        }
-        request_structure->amount = amount;
+        // amount
+        token = strtok_r(NULL, " ", &saveptr);
+        req->amount = atoi(token);
 
-        token = strtok_r(NULL, " ", &saveptr1);
-        if(token != NULL)
-        {
-            info->command = INVALID;
-            free(request_structure);
-            return info;
-        }
+        // no más tokens
+        token = strtok_r(NULL, " ", &saveptr);
 
-        info->structure = request_structure;
+        info->structure = req;
     }
 
-    else if(!strcmp(token, "RELEASE"))
+    else if (!strcmp(token, "RELEASE"))
     {
         info->command = RELEASE;
-        token = strtok_r(NULL, " ", &saveptr1); // job_id
-        if(token == NULL)
-        {
-            // error (indicar estructura invalido)
-            info->command = INVALID;
-            return info;
-        }
 
-        int job_id = atoi(token); // da 0 si no es un entero o si el entero es 0
-        if(!job_id)
-        {
-            // error (indicar estructura invalido)
-            info->command = INVALID;
-            return info;
-        }
+        // job_id
+        token = strtok_r(NULL, " ", &saveptr);
+        int *job_id = malloc(sizeof(int));
+        *job_id = atoi(token);
 
-        token = strtok_r(NULL, " ", &saveptr1);
-        if(token != NULL)
-        {
-            // error (indicar estructura invalido)
-            info->command = INVALID;
-            return info;
-        }
-
-        int *job_id_info_ptr = malloc(sizeof(int));
-        *job_id_info_ptr = job_id;
-
-        info->structure = job_id_info_ptr;
-    } 
-
-    else
-    {
-        info->command = INVALID;
+        info->structure = job_id;
     }
 
     return info;

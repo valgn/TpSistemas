@@ -3,6 +3,7 @@
 
 #include <time.h>
 #include <netinet/in.h>
+#include "structures/glist.h"
 
 typedef enum _Command
 {
@@ -36,19 +37,48 @@ typedef struct {
     int fd;
 } EventData;
 
-typedef struct _Request
+typedef enum {
+    REQ_PENDING,
+    REQ_GRANTED,
+    REQ_DENIED,
+    REQ_WAITING
+} ReqState;
+
+typedef struct _erlangRequest
 {
-    int job_id;
     char ip[INET_ADDRSTRLEN];
     Resource resource; 
     int amount;
-} Request;
+    ReqState state;
+} ErlangRequest;
+
+typedef struct _nodeRequest{
+    int job_id;
+    Resource resource;
+    int amount;
+    int client_fd;
+} NodeRequest;
+
+typedef struct _Job{
+    int job_id;
+    GList requests;   
+    int clientfd;           
+    int pending;      
+} Job;
 
 typedef struct _PetitionInfo
 {
     Command command;
     void* structure;
 } PetitionInfo;
+
+typedef struct _RemoteAllocation
+{
+    int fd;                      // socket del nodo remoto
+    int job_id;                  // job que originó la reserva
+    Resource resource;
+    int amount;
+} RemoteAllocation;
 
 typedef struct _cNode
 {
