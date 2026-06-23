@@ -3,7 +3,9 @@
 
 #include <time.h>
 #include <netinet/in.h>
-#include "structures/glist.h"
+#include "glist.h"
+
+#define MAX_BUFF 255
 
 typedef enum _Command
 {
@@ -29,7 +31,8 @@ typedef enum {
     LISTENER_NODE,
     CLIENT_ERLANG,
     CLIENT_NODE,
-    UDP_NODE
+    UDP_NODE,
+    TIMER_EVENT
 } EventType;
 
 typedef struct {
@@ -37,19 +40,12 @@ typedef struct {
     int fd;
 } EventData;
 
-typedef enum {
-    REQ_PENDING,
-    REQ_GRANTED,
-    REQ_DENIED,
-    REQ_WAITING
-} ReqState;
-
 typedef struct _erlangRequest
 {
     char ip[INET_ADDRSTRLEN];
     Resource resource; 
     int amount;
-    ReqState state;
+    int remote_fd;
 } ErlangRequest;
 
 typedef struct _nodeRequest{
@@ -57,28 +53,35 @@ typedef struct _nodeRequest{
     Resource resource;
     int amount;
     int client_fd;
+    time_t timestamp;
 } NodeRequest;
 
 typedef struct _Job{
     int job_id;
     GList requests;   
-    int clientfd;           
-    int pending;      
+    int clientfd;
+    int is_processing;           
 } Job;
+
+typedef enum {
+    REQ_ERLANG,
+    REQ_NODE
+} RequestOrigin;
+
+typedef struct _UnifiedRequest {
+    RequestOrigin origin;
+    time_t timestamp; 
+    union {
+        Job *erlang_job;
+        NodeRequest *node_req;
+    } data;
+} UnifiedRequest;
 
 typedef struct _PetitionInfo
 {
     Command command;
     void* structure;
 } PetitionInfo;
-
-typedef struct _RemoteAllocation
-{
-    int fd;                      // socket del nodo remoto
-    int job_id;                  // job que originó la reserva
-    Resource resource;
-    int amount;
-} RemoteAllocation;
 
 typedef struct _cNode
 {

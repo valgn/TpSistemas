@@ -1,38 +1,71 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include "parse_handler.h"
+#define _GNU_SOURCE
 
-/*
-fd_readline: reads one character at a time from the provided fd, then stores the result in a buffer
+#include "../wrapper.h"
+
+/* ------------------------------------------------------------------------------------------
+    * Reads one character at a time from the provided fd, then stores the result in a buffer.
+    * Parameters: fd: file descriptor to read from, buf: buffer to store the result.
+    * Returns: the number of characters read, or -1 if there was an error, or 0 if the connection was closed.
 */
 int fd_readline(int fd, char *buf)
 {
-	int rc;
-	int i = 0;
+    int rc;
+    int i = 0;
 
-	while ((rc = read(fd, buf + i, 1)) > 0) 
+    while (1) 
     {
-		if (buf[i] == '\n')
-        {
-            i++;
-			break;
-        }
+        rc = read(fd, buf + i, 1);
         
-		i++;
-	}
+        if (rc > 0) 
+        {
+            if (buf[i] == '\n')
+            {
+                i++;
+                break;
+            }
+            i++;
+        } 
+        else if (rc == 0) 
+        {
+            // EOF: Client closed the connection.
+            if (i > 0) break;
+            return 0;
+        } 
+        else 
+        {
+            // rc < 0 (Error)
+            if (errno == EAGAIN || errno == EWOULDBLOCK) 
+            {
 
-	if (rc <= 0)
-		return rc;
+                // Socket is non-blocking and data is still in transit. 
+                // Yield CPU for 1 millisecond to wait for the rest of the packet.
+                usleep(1000); 
+                continue;
+            }
+            return -1; // Error real de I/O
+        }
+    }
 
-	return i;
+    return i;
 }
 
-/*
-parse_erlang_petition: parses the input of the erlang client and returns a pointer to a PetitionInfo structure
+/* ------------------------------------------------------------------------------------------
+    * Copies the content of an ErlangRequest structure to a new one.
+    * Parameters: data: pointer to the original ErlangRequest structure.
+    * Returns: a pointer to the new ErlangRequest structure, or NULL if memory allocation fails.
 */
-PetitionInfo *parse_erlang_petition(int clientfd)
+void *copy_request(void *data)
+{
+    ErlangRequest *req = (ErlangRequest *)data;
+    ErlangRequest *copy = malloc(sizeof(ErlangRequest));
+    if (!copy) return NULL;
+    *copy = *req;
+    return copy;
+}
+
+/* ------------------------------------------------------------------------------------------
+*/
+PetitionInfo* parse_erlang_petition(int clientfd)
 {
     PetitionInfo *info = malloc(sizeof(PetitionInfo));
 
@@ -41,12 +74,12 @@ PetitionInfo *parse_erlang_petition(int clientfd)
     
     if (read_characters <= 0)
     {
-        // cliente cerró conexión o hubo desconexion abrupta
+        // Client disconnected or error occurred
         info->command = DISCONNECT;
         return info;
     }
 
-    buff[strcspn(buff, "\n")] = '\0'; // quitamos el \n
+    buff[strcspn(buff, "\n")] = '\0';
 
     char *saveptr1;
     char *saveptr2;
@@ -62,13 +95,13 @@ PetitionInfo *parse_erlang_petition(int clientfd)
     if(!strcmp(token, "JOB_REQUEST"))
     {
         info->command = JOB_REQUEST;
-        token = strtok_r(NULL, " ", &saveptr1); // job_id
+        token = strtok_r(NULL, " ", &saveptr1);
         if(token == NULL)
         {
             info->command = INVALID;
             return info;
         }
-        int job_id = atoi(token); // da 0 si no es un entero o si el entero es 0
+        int job_id = atoi(token);
 
         if(!job_id)
         {
@@ -78,7 +111,7 @@ PetitionInfo *parse_erlang_petition(int clientfd)
 
         GList request_list = glist_create();
         
-        token = strtok_r(NULL, " ", &saveptr1); // ip/res/amount
+        token = strtok_r(NULL, " ", &saveptr1);
 
         if(token == NULL)
         {
@@ -86,16 +119,13 @@ PetitionInfo *parse_erlang_petition(int clientfd)
             return info;
         }
 
-        int i = 0;
-
         while(token != NULL)
         {
             ErlangRequest *request_structure = malloc(sizeof(ErlangRequest));
 
-            char *request = strtok_r(token, ":", &saveptr2); // ip
+            char *request = strtok_r(token, ":", &saveptr2);
             if(request == NULL)
             {
-                // error (indicar estructura invalido) y eliminar lista
                 info->command = INVALID;
                 free(request_structure);
                 glist_destroy(request_list, destroy_request);
@@ -106,10 +136,9 @@ PetitionInfo *parse_erlang_petition(int clientfd)
             strncpy(request_structure->ip, request, INET_ADDRSTRLEN);
             request_structure->ip[INET_ADDRSTRLEN - 1] = '\0';
 
-            request = strtok_r(NULL, ":", &saveptr2); // resource
+            request = strtok_r(NULL, ":", &saveptr2);
             if(request == NULL)
             {
-                // error (indicar estructura invalido) y eliminar lista
                 info->command = INVALID;
                 free(request_structure);
                 glist_destroy(request_list, destroy_request);
@@ -120,7 +149,6 @@ PetitionInfo *parse_erlang_petition(int clientfd)
             else if(!strcmp(request, "gpu")) request_structure->resource = GPU;
             else
             {
-                // error (indicar estructura invalido) y eliminar lista
                 info->command = INVALID;
                 free(request_structure);
                 glist_destroy(request_list, destroy_request);
@@ -128,10 +156,9 @@ PetitionInfo *parse_erlang_petition(int clientfd)
             }
             
 
-            request = strtok_r(NULL, ":", &saveptr2); // amount
+            request = strtok_r(NULL, ":", &saveptr2);
             if(request == NULL)
             {
-                // error (indicar estructura invalido) y eliminar lista
                 info->command = INVALID;
                 free(request_structure);
                 glist_destroy(request_list, destroy_request);
@@ -140,26 +167,24 @@ PetitionInfo *parse_erlang_petition(int clientfd)
             int amount = atoi(request);
             if(!amount)
             {
-                // error (indicar estructura invalido) y eliminar lista
                 info->command = INVALID;
                 free(request_structure);
                 glist_destroy(request_list, destroy_request);
                 return info;
             }
             request_structure->amount = amount;
-            request_structure->state = REQ_PENDING;
+            request_structure->remote_fd = -1;
 
             request_list = glist_addFront(request_list, request_structure, copy_request); 
 
             token = strtok_r(NULL, " ", &saveptr1);
-            i++;
         }
 
         Job *job_info = malloc(sizeof(Job));
         job_info->job_id = job_id;
         job_info->requests = request_list;
         job_info->clientfd = clientfd;
-        job_info->pending = i;
+        job_info->is_processing = 0;
 
         info->structure = job_info;
     }
@@ -170,15 +195,14 @@ PetitionInfo *parse_erlang_petition(int clientfd)
         token = strtok_r(NULL, " ", &saveptr1); // job_id
         if(token == NULL)
         {
-            // error (indicar estructura invalido)
             info->command = INVALID;
             return info;
         }
 
-        int job_id = atoi(token); // da 0 si no es un entero o si el entero es 0
+        int job_id = atoi(token); 
         if(!job_id)
         {
-            // error (indicar estructura invalido)
+
             info->command = INVALID;
             return info;
         }
@@ -186,7 +210,7 @@ PetitionInfo *parse_erlang_petition(int clientfd)
         token = strtok_r(NULL, " ", &saveptr1);
         if(token != NULL)
         {
-            // error (indicar estructura invalido)
+
             info->command = INVALID;
             return info;
         }
@@ -203,15 +227,14 @@ PetitionInfo *parse_erlang_petition(int clientfd)
         token = strtok_r(NULL, " ", &saveptr1); // job_id
         if(token == NULL)
         {
-            // error (indicar estructura invalido)
+            // Error (indicate invalid structure) and delete list
             info->command = INVALID;
             return info;
         }
 
-        int job_id = atoi(token); // da 0 si no es un entero o si el entero es 0
+        int job_id = atoi(token);
         if(!job_id)
         {
-            // error (indicar estructura invalido)
             info->command = INVALID;
             return info;
         }
@@ -219,7 +242,6 @@ PetitionInfo *parse_erlang_petition(int clientfd)
         token = strtok_r(NULL, " ", &saveptr1);
         if(token != NULL)
         {
-            // error (indicar estructura invalido)
             info->command = INVALID;
             return info;
         }
@@ -236,7 +258,6 @@ PetitionInfo *parse_erlang_petition(int clientfd)
         token = strtok_r(NULL, " ", &saveptr1);
         if(token != NULL)
         {
-            // error (indicar estructura invalido)
             info->command = INVALID;
             return info;
         }
@@ -250,11 +271,14 @@ PetitionInfo *parse_erlang_petition(int clientfd)
     return info;
 }
 
-/*
-parse_node_petition: parses the input of the node client and returns a pointer to a PetitionInfo structure
+/* ------------------------------------------------------------------------------------------
+    * Parses a petition from a node client and returns a PetitionInfo structure.
+    * Parameters: clientfd: file descriptor of the client socket.
+    * Returns: a pointer to a PetitionInfo structure containing the parsed information.
 */
 PetitionInfo *parse_node_petition(int clientfd)
 {
+    
     PetitionInfo *info = malloc(sizeof(PetitionInfo));
 
     char buff[MAX_BUFF];
@@ -278,21 +302,17 @@ PetitionInfo *parse_node_petition(int clientfd)
         NodeRequest *req = malloc(sizeof(NodeRequest));
         req->client_fd = clientfd;
 
-        // job_id
         token = strtok_r(NULL, " ", &saveptr);
         req->job_id = atoi(token);
 
-        // resource
         token = strtok_r(NULL, " ", &saveptr);
         if (!strcmp(token, "cpu")) req->resource = CPU;
         else if (!strcmp(token, "mem")) req->resource = MEM;
         else if (!strcmp(token, "gpu")) req->resource = GPU;
 
-        // amount
         token = strtok_r(NULL, " ", &saveptr);
         req->amount = atoi(token);
 
-        // no más tokens
         token = strtok_r(NULL, " ", &saveptr);
 
         info->structure = req;
@@ -302,7 +322,6 @@ PetitionInfo *parse_node_petition(int clientfd)
     {
         info->command = RELEASE;
 
-        // job_id
         token = strtok_r(NULL, " ", &saveptr);
         int *job_id = malloc(sizeof(int));
         *job_id = atoi(token);

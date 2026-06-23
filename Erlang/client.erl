@@ -241,5 +241,6 @@ tcpRouter(Sock, WorkingMap) ->
 
         allDone -> 
             closeLogger(),
+            res_handler ! finish,
             gen_tcp:close(Sock)
     end.

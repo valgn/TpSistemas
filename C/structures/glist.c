@@ -2,18 +2,15 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "glist.h"
 
-/**
- * Returns an empty list.
- */
-GList glist_create() { 
+GList glist_create()
+{ 
   return NULL; 
 }
 
-/**
- * Destroys the list.
- */
-void glist_destroy(GList list, DestroyFunction destroy) {
+void glist_destroy(GList list, DestroyFunction destroy) 
+{
   GNode *nodeToDelete;
   while (list != NULL) {
     nodeToDelete = list;
@@ -23,17 +20,24 @@ void glist_destroy(GList list, DestroyFunction destroy) {
   }
 }
 
-/**
- * Determines whether the list is empty.
- */
-int glist_isEmpty(GList list) { 
+GList glist_destroyFront(GList list, DestroyFunction destroy)
+{
+  if(list == NULL) return NULL;
+  GNode* temp = list;
+  list = list->next;
+  destroy(temp->data);
+  free(temp);
+  return list;
+}
+
+int glist_isEmpty(GList list)
+{ 
   return (list == NULL); 
 }
 
-/**
- * Adds an element at the front of the list.
- */
-GList glist_addFront(GList list, void *data, CopyFunction copy) {
+
+GList glist_addFront(GList list, void *data, CopyFunction copy)
+{
   GNode *newNode = malloc(sizeof(GNode));
   assert(newNode != NULL);
   newNode->next = list;
@@ -41,7 +45,8 @@ GList glist_addFront(GList list, void *data, CopyFunction copy) {
   return newNode;
 }
 
-GList glist_addBack(GList list, void* data, CopyFunction copy){
+GList glist_addBack(GList list, void* data, CopyFunction copy)
+{
     if(list==NULL){
         GNode *newNode = malloc(sizeof(GNode));
         newNode->data = copy(data);
@@ -52,10 +57,9 @@ GList glist_addBack(GList list, void* data, CopyFunction copy){
     return list;
 }
 
-/**
- * Searches for an element in the list.
- */
-void* glist_search(GList list, void* data, CompareFunction comp){
+
+void* glist_search(GList list, void* data, CompareFunction comp)
+{
   int found = 0;
   GNode *node = list;
   while( found == 0 && node != NULL ){
@@ -68,15 +72,15 @@ void* glist_search(GList list, void* data, CompareFunction comp){
   return NULL;
 }
 
-/**
- * Traverses the list, applying the given function.
- */
-void glist_traverse(GList list, VisitFunction visit) {
+
+void glist_traverse(GList list, VisitFunction visit) 
+{
   for (GNode *node = list; node != NULL; node = node->next)
     visit(node->data);
 }
 
-GList glist_delete(GList list, void* data, DestroyFunction destr, CompareFunction comp){
+GList glist_delete(GList list, void* data, DestroyFunction destr, CompareFunction comp)
+{
   GNode* prev = NULL;
   GNode* curr = list;
   int found = 1;
@@ -105,7 +109,8 @@ GList glist_delete(GList list, void* data, DestroyFunction destr, CompareFunctio
   return list;
 }
 
-int glist_count(GList list){
+int glist_count(GList list)
+{
   int count = 0;
   if(list == NULL) return 0;
   while(list != NULL){

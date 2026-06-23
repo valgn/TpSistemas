@@ -3,6 +3,7 @@
 %%% -----------------------------------------------------------------------
 -module(jobs).
 -export([request/3, status/2, createJob/1, simulateJobs/2, handleResInit/1, getRandAvRes/0, releaseRes/1, shuffle/1]).
+-export([force_request/3]).
 -include("globals.hrl").
 
 %% ------------------------------------------------------------------------
@@ -114,5 +115,33 @@ createJob(RecNodes) ->
     DesRes = getRandAvRes(),
     ShuffledNodes = shuffle(RecNodes),
     ReqRes = resourceHandling:getResourcesStr(ShuffledNodes, DesRes),
-    String = lists:flatten(["JOB_REQUEST ", JobId, " ", ReqRes]),
-    request(String, JobId, DesRes).
+    if 
+        ReqRes == "" -> 
+            client:consoleLog(lists:flatten(["ERROR: Not enough resources available for job ", JobId, "."]), true),
+            jobs_running ! down;
+        true ->
+            String = lists:flatten(["JOB_REQUEST ", JobId, " ", ReqRes]),
+            request(String, JobId, DesRes)
+    end.
+
+
+
+force_request(Port, JobId, String) ->
+    {ok, Sock} = gen_tcp:connect("127.0.0.1", Port, [{active, false}, {packet, line}]),
+    gen_tcp:send(Sock, String),
+    io:fwrite("Petición enviada al puerto ~p. Esperando respuesta...~n", [Port]),
+    case gen_tcp:recv(Sock, 0) of
+        {ok, Response} ->
+            CleanRes = string:trim(Response),
+            io:fwrite("Respuesta para Job ~s: ~s~n", [JobId, CleanRes]),
+            if 
+                CleanRes == "JOB_TIMEOUT" ->
+                    io:fwrite("DEADLOCK DETECTADO. Aplicando backoff...~n"),
+                    timer:sleep(rand:uniform(?PLUS_TIMEOUT) + ?MIN_TIMEOUT),
+                    force_request(Port, JobId, String); % Reintento
+                true -> ok
+            end;
+        {error, Reason} ->
+            io:fwrite("Error en socket: ~p~n", [Reason])
+    end,
+    gen_tcp:close(Sock).
