@@ -2,5 +2,6 @@
 -define(JOB_PLUSTIME, 1000).
 -define(JOB_MINTIME, 5000).
 -define(PLUS_TIMEOUT, 10000).
+-define(MAXRETRIES, 3).
 -define(MIN_TIMEOUT, 3000).
 -record(node, {ip, port, cpu, mem, gpu}).

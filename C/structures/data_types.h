@@ -5,7 +5,7 @@
 #include <netinet/in.h>
 #include "glist.h"
 
-#define MAX_BUFF 255
+#define MAX_BUFF 1024
 
 typedef enum _Command
 {

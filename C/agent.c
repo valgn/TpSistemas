@@ -6,7 +6,7 @@ char my_ip[INET_ADDRSTRLEN] = {0};
 
 int ERLANG_TCP_PORT = 5678;
 int NODE_TCP_PORT = 5679;
-int UDP_PORT = 5680;
+int UDP_PORT = 12529;
 
 int available_cpu;
 int available_mem;

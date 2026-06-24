@@ -2,7 +2,7 @@
 %%% This module contains the implementation of the job processes, the simulation of them and the request/release petitions.
 %%% -----------------------------------------------------------------------
 -module(jobs).
--export([request/3, status/2, createJob/1, simulateJobs/2, handleResInit/1, getRandAvRes/0, releaseRes/1, shuffle/1]).
+-export([request/4, status/2, createJob/1, simulateJobs/1, handleResInit/1, getRandAvRes/0, releaseRes/1, shuffle/1]).
 -export([force_request/3]).
 -include("globals.hrl").
 
@@ -15,7 +15,7 @@
 %% JobId The unique identifier of the job.
 %% DesRes The desired resources for the job, used to release them in case of a timeout or a denied request.
 %% Return : This function does not return any value.
-request(String, JobId, DesRes) ->
+request(String, JobId, DesRes, Retries) ->
     tcp_router ! {req, String, JobId, self()},
     receive 
         "JOB_GRANTED" -> 
@@ -29,9 +29,15 @@ request(String, JobId, DesRes) ->
             releaseRes(DesRes);
 
         "JOB_TIMEOUT" ->
-            releaseRes(DesRes),
-            timer:sleep(rand:uniform(?PLUS_TIMEOUT) + ?MIN_TIMEOUT),
-            request(String, JobId, DesRes);
+            if 
+                Retries > 0 ->
+                    timer:sleep(rand:uniform(?PLUS_TIMEOUT) + ?MIN_TIMEOUT),
+                    request(String, JobId, DesRes, Retries - 1);
+                true ->
+                    client:consoleLog(lists:flatten(["ERROR: Max retries reached for job ", JobId]), true),
+                    jobs_running ! down,
+                    releaseRes(DesRes)
+            end;
         
         tcp_closed -> 
             jobs_running ! down,
@@ -97,11 +103,10 @@ shuffle(Nodes) ->
 %% StrNodes A string containing the nodes information, in the format "ip:port:cpu:mem:gpu,ip:port:cpu:mem:gpu,...".
 %% N The number of jobs to be created in the simulation.
 %% Return: This function does not return any value.
-simulateJobs(StrNodes, N) ->
-    RecNodes = resourceHandling:parseNodesStr(StrNodes),
-    MaxRes = resourceHandling:countRes(RecNodes),
-    handleResInit(MaxRes),
-    lists:foreach(fun(_) -> spawn(?MODULE, createJob, [RecNodes]), timer:sleep(rand:uniform(5000))  end, lists:seq(1, N)),
+simulateJobs(RecNodes) ->
+    spawn(?MODULE, createJob, [RecNodes]),
+    timer:sleep(5000),
+    simulateJobs(RecNodes),    
     ok.
 
 %% ------------------------------------------------------------------------
@@ -121,7 +126,7 @@ createJob(RecNodes) ->
             jobs_running ! down;
         true ->
             String = lists:flatten(["JOB_REQUEST ", JobId, " ", ReqRes]),
-            request(String, JobId, DesRes)
+            request(String, JobId, DesRes, ?MAXRETRIES)
     end.
 
 

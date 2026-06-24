@@ -112,9 +112,9 @@ resHandler({Cpu, Mem, Gpu}) ->
 %% JobsAm -> Amount of jobs that are currently running.
 %% Return: This function does not return any value.
 jobsRunning(0)      -> tcp_router ! allDone;
-jobsRunning(JobsAm) ->
+jobsRunning(_) ->
     receive
-        down -> jobsRunning(JobsAm - 1)
+        down -> jobsRunning(infinity)
     end.
 %% ----------------------------------------------------------------------
 %% This function will manage the logging of the messages sent and received by the client. It will be waiting for messages in order to log them
@@ -170,7 +170,11 @@ client() ->
     tcp_router ! {start, Sock},
     tcp_router ! {get_nodes, self()},
     receive
-        {nodes, Nodes} -> jobs:simulateJobs(Nodes, ?NUMBERJOBS);
+        {nodes, Nodes} -> 
+            RecNodes = resourceHandling:parseNodesStr(Nodes),
+            MaxRes = resourceHandling:countRes(RecNodes),
+            jobs:handleResInit(MaxRes),
+            jobs:simulateJobs(RecNodes);
         tcp_closed -> consoleLog("ERROR: TCP closed before receiving nodes.", false)
     end.
 
